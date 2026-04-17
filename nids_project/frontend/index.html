@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>NIDS Sentinel – SOC Dashboard</title>
+<link rel="stylesheet" href="css/style.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-shield">🛡️</span>
+    <div><div class="logo-title">NIDS</div><div class="logo-sub">SENTINEL</div></div>
+  </div>
+  <nav class="sidebar-nav">
+    <a class="nav-item active" data-page="dashboard" onclick="goPage('dashboard')">
+      <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+    </a>
+    <a class="nav-item" data-page="monitor" onclick="goPage('monitor')">
+      <span class="nav-icon">📡</span><span class="nav-label">Live Monitor</span>
+      <span class="nav-badge" id="badge-monitor">0</span>
+    </a>
+    <a class="nav-item" data-page="alerts" onclick="goPage('alerts')">
+      <span class="nav-icon">🚨</span><span class="nav-label">Alerts</span>
+      <span class="nav-badge danger" id="badge-alerts">0</span>
+    </a>
+    <a class="nav-item" data-page="logs" onclick="goPage('logs')">
+      <span class="nav-icon">📋</span><span class="nav-label">Log Table</span>
+    </a>
+    <a class="nav-item" data-page="network" onclick="goPage('network')">
+      <span class="nav-icon">🌐</span><span class="nav-label">IP Manager</span>
+    </a>
+    <a class="nav-item" data-page="simulate" onclick="goPage('simulate')">
+      <span class="nav-icon">⚡</span><span class="nav-label">Simulate</span>
+    </a>
+    <a class="nav-item" data-page="train" onclick="goPage('train')">
+      <span class="nav-icon">🧠</span><span class="nav-label">Train Models</span>
+    </a>
+    <a class="nav-item" data-page="settings" onclick="goPage('settings')">
+      <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sys-status"><span class="status-dot" id="sysStatusDot"></span><span id="sysStatusText">Connecting…</span></div>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</aside>
+
+<div class="topbar">
+  <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="topbar-title" id="pageTitle">Dashboard</div>
+  <div class="topbar-actions">
+    <span class="topbar-stat" id="topPps">0 pps</span>
+    <button class="tbtn" onclick="toggleSound()" id="soundBtn">🔊</button>
+    <button class="tbtn" onclick="exportCSV()">⬇</button>
+    <div class="topbar-user"><div class="user-av" id="userAv">A</div><span id="userLbl">admin</span></div>
+  </div>
+</div>
+
+<main class="content">
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="kpi-row">
+    <div class="kpi blue"><div class="kpi-icon">📦</div><div class="kpi-body"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Total Packets</div><div class="kpi-sub" id="kpiPps">0 pkt/s</div></div></div>
+    <div class="kpi red"><div class="kpi-icon">⚠️</div><div class="kpi-body"><div class="kpi-val" id="kpiAnomaly">0</div><div class="kpi-lbl">Anomalies</div><div class="kpi-sub" id="kpiAnomalyPct">0.0%</div></div></div>
+    <div class="kpi yellow"><div class="kpi-icon">🎯</div><div class="kpi-body"><div class="kpi-val" id="kpiThreats">0</div><div class="kpi-lbl">Active Threats</div><div class="kpi-sub">last 5 min</div></div></div>
+    <div class="kpi green"><div class="kpi-icon">✅</div><div class="kpi-body"><div class="kpi-val" id="kpiNormal">0</div><div class="kpi-lbl">Normal Traffic</div><div class="kpi-sub" id="kpiNormalPct">100%</div></div></div>
+    <div class="kpi purple"><div class="kpi-icon">🔴</div><div class="kpi-body"><div class="kpi-val" id="kpiThreatLvl" style="font-size:1.1rem">LOW</div><div class="kpi-lbl">Threat Level</div><div class="kpi-sub" id="kpiTopAtk">—</div></div></div>
+  </div>
+  <div class="charts-row">
+    <div class="card flex2"><div class="card-hdr"><span>📈 Real-Time Traffic</span><span class="card-meta" id="ppsLabel">0 pps</span></div><div class="chart-box"><canvas id="trafficChart"></canvas></div></div>
+    <div class="card"><div class="card-hdr"><span>🥧 Attack Distribution</span></div><div class="chart-box"><canvas id="pieChart"></canvas></div></div>
+  </div>
+  <div class="bottom-row">
+    <div class="card flex2"><div class="card-hdr"><span>🚨 Live Alerts</span><button class="hdr-btn" onclick="clearAlerts()">Clear</button></div><div class="alert-feed" id="dashAlerts"><div class="empty-msg">No threats detected</div></div></div>
+    <div class="card"><div class="card-hdr"><span>🎯 Top Attackers</span></div><div class="top-attackers" id="topAttackers"><div class="empty-msg">No data</div></div></div>
+  </div>
+</div>
+
+<!-- LIVE MONITOR -->
+<div class="page" id="page-monitor">
+  <div class="card full-h">
+    <div class="card-hdr">
+      <span>📡 Live Packet Stream</span>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <select class="fsel" id="monFilter" onchange="applyMonFilter()">
+          <option value="all">All Traffic</option>
+          <option value="anomaly">Anomalies Only</option>
+          <option value="normal">Normal Only</option>
+        </select>
+        <button class="hdr-btn" id="monPauseBtn" onclick="toggleMonPause()">⏸ Pause</button>
+        <span class="hdr-meta" id="monCount">0 packets</span>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="data-tbl">
+        <thead><tr><th>Time</th><th>Src IP</th><th>Country</th><th>ISP</th><th>Dst IP</th><th>Proto</th><th>Bytes</th><th>Duration</th><th>ML</th><th>DL</th><th>Result</th><th>Attack</th><th>Threat</th><th>Score</th></tr></thead>
+        <tbody id="monBody"><tr><td colspan="11" class="empty-cell">Waiting for packets…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ALERTS -->
+<div class="page" id="page-alerts">
+  <div class="alerts-header-bar">
+    <div class="astat red"><div class="astat-n" id="aTotal">0</div><div>Total</div></div>
+    <div class="astat yellow"><div class="astat-n" id="aCritical">0</div><div>Critical</div></div>
+    <div class="astat orange"><div class="astat-n" id="aHigh">0</div><div>High</div></div>
+    <div class="astat blue"><div class="astat-n" id="aMedium">0</div><div>Medium</div></div>
+    <div style="margin-left:auto;display:flex;gap:.5rem">
+      <button class="btn-primary" onclick="clearAlerts()">Clear All</button>
+      <button class="btn-outline" onclick="loadAlerts()">Refresh</button>
+    </div>
+  </div>
+  <div class="card"><div class="alert-list" id="alertList"><div class="empty-msg">No alerts</div></div></div>
+</div>
+
+<!-- LOGS -->
+<div class="page" id="page-logs">
+  <div class="card">
+    <div class="card-hdr"><span>📋 Detection Logs</span><button class="hdr-btn" onclick="exportCSV()">⬇ Export CSV</button></div>
+    <div class="filter-bar">
+      <input class="finput" id="logSearch" placeholder="🔍 Search IP, attack, protocol, country…" oninput="debounceLog()" onkeydown="searchLog(event)"/>
+      <select class="fsel" id="logThreat" onchange="loadLogs()"><option value="">All Threats</option><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option></select>
+      <select class="fsel" id="logResult" onchange="loadLogs()"><option value="">All Results</option><option value="anomaly">Anomalies Only</option><option value="normal">Normal Only</option></select>
+      <select class="fsel" id="logTime" onchange="loadLogs()"><option value="">All Time</option><option value="5">Last 5 min</option><option value="30">Last 30 min</option><option value="60">Last 1 hour</option></select>
+      <button class="btn-outline" onclick="loadLogs()">🔄</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="data-tbl">
+        <thead><tr><th>Timestamp</th><th>Src IP</th><th>Country</th><th>ISP</th><th>Dst IP</th><th>Proto</th><th>Bytes</th><th>ML</th><th>DL</th><th>Result</th><th>Attack</th><th>Threat</th><th>Score</th></tr></thead>
+        <tbody id="logBody"><tr><td colspan="10" class="empty-cell">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="logPager"></div>
+  </div>
+</div>
+
+<!-- IP MANAGER -->
+<div class="page" id="page-network">
+  <div class="two-col">
+    <div class="card">
+      <div class="card-hdr"><span>🚫 IP Blacklist</span></div>
+      <div style="padding:1rem">
+        <div class="input-row"><input class="finput" id="blIp" placeholder="IP address" oninput="lookupInputGeo('blIp','blGeo')"/><input class="finput" id="blReason" placeholder="Reason" style="max-width:130px"/><button class="btn-danger" onclick="addBlacklist()">Block</button></div>
+        <div id="blGeo" style="font-size:.72rem;color:var(--text2);padding:.2rem 0;min-height:1rem"></div>
+        <ul class="ip-list" id="blList"><li class="empty-msg">No blocked IPs</li></ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span>✅ IP Whitelist</span></div>
+      <div style="padding:1rem">
+        <div class="input-row"><input class="finput" id="wlIp" placeholder="IP address" oninput="lookupInputGeo('wlIp','wlGeo')"/><input class="finput" id="wlReason" placeholder="Reason" style="max-width:130px"/><button class="btn-success" onclick="addWhitelist()">Trust</button></div>
+        <div id="wlGeo" style="font-size:.72rem;color:var(--text2);padding:.2rem 0;min-height:1rem"></div>
+        <ul class="ip-list" id="wlList"><li class="empty-msg">No trusted IPs</li></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SIMULATE -->
+<div class="page" id="page-simulate">
+  <div class="two-col">
+    <div class="card">
+      <div class="card-hdr"><span>⚡ Attack Simulation</span></div>
+      <div style="padding:1.25rem">
+        <p style="color:var(--text-muted);font-size:.83rem;margin-bottom:1.25rem">Inject simulated attack traffic. Results appear live in the dashboard within seconds.</p>
+        <div class="sim-grid">
+          <button class="sim-btn dos" onclick="simulate('DoS')"><div class="sim-icon">💥</div><div class="sim-name">DoS Flood</div><div class="sim-desc">SYN flood TCP:80</div></button>
+          <button class="sim-btn ddos" onclick="simulate('DDoS')"><div class="sim-icon">🌊</div><div class="sim-name">DDoS</div><div class="sim-desc">UDP from many IPs</div></button>
+          <button class="sim-btn scan" onclick="simulate('PortScan')"><div class="sim-icon">🔍</div><div class="sim-name">Port Scan</div><div class="sim-desc">nmap SYN scan</div></button>
+          <button class="sim-btn brute" onclick="simulate('BruteForce')"><div class="sim-icon">🔑</div><div class="sim-name">Brute Force</div><div class="sim-desc">SSH attempts</div></button>
+          <button class="sim-btn botnet" onclick="simulate('Botnet')"><div class="sim-icon">🤖</div><div class="sim-name">Botnet</div><div class="sim-desc">C&C traffic</div></button>
+          <button class="sim-btn web" onclick="simulate('WebAttack')"><div class="sim-icon">🕸</div><div class="sim-name">Web Attack</div><div class="sim-desc">SQLi / XSS</div></button>
+          <button class="sim-btn random" onclick="simulate(null)"><div class="sim-icon">🎲</div><div class="sim-name">Random</div><div class="sim-desc">Random attack</div></button>
+          <button class="sim-btn stop" onclick="stopSim()"><div class="sim-icon">⏹</div><div class="sim-name">Stop</div><div class="sim-desc">End attack</div></button>
+        </div>
+        <div class="sim-status-bar" id="simStatus"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span>📊 Recent Detections</span></div>
+      <div style="padding:.75rem">
+        <div class="chart-box" style="height:180px"><canvas id="simChart"></canvas></div>
+        <div id="simLog" style="margin-top:.75rem;max-height:160px;overflow-y:auto;font-size:.78rem;font-family:var(--mono)"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRAIN -->
+<div class="page" id="page-train">
+  <div class="two-col">
+    <div class="card">
+      <div class="card-hdr"><span>🧠 Train Models</span><span class="status-pill" id="trainPill">IDLE</span></div>
+      <div style="padding:1.25rem">
+        <p style="color:var(--text-muted);font-size:.83rem;margin-bottom:1rem">Add dataset paths (leave empty for synthetic data). Training runs in the background.</p>
+        <div id="datasetEntries"></div>
+        <div class="input-row" style="margin-bottom:1rem">
+          <select class="fsel" id="dsType">
+            <option value="auto">auto-detect</option><option value="cicids2017">CICIDS 2017</option>
+            <option value="nslkdd">NSL-KDD</option><option value="unswnb15">UNSW-NB15</option>
+            <option value="cicddos2019">CIC-DDoS 2019</option><option value="kddcup99">KDD Cup 99</option>
+            <option value="custom">Custom CSV</option>
+          </select>
+          <input class="finput" id="dsPath" placeholder="/path/to/dataset on server"/>
+          <button class="btn-outline" onclick="addDsEntry()">+ Add</button>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" id="optSyn" checked/> Include synthetic data</label>
+        <div class="slider-group" style="margin:.75rem 0">
+          <label>Max rows per file: <strong id="maxRowsLbl">150,000</strong></label>
+          <input type="range" id="maxRowsSlider" min="10000" max="500000" step="10000" value="150000"
+                 oninput="document.getElementById('maxRowsLbl').textContent=parseInt(this.value).toLocaleString()"/>
+        </div>
+        <button class="btn-primary full-w" id="trainBtn" onclick="startTrain()">🚀 Start Training</button>
+        <div id="trainProgress" style="display:none;margin-top:1rem">
+          <div class="progress-bar"><div class="progress-fill anim" id="trainFill"></div></div>
+          <div class="progress-txt" id="trainTxt">Starting…</div>
+        </div>
+        <div id="trainResult"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span>📂 Supported Datasets</span></div>
+      <div style="padding:.75rem">
+        <table class="data-tbl">
+          <thead><tr><th>Key</th><th>Dataset</th><th>Format</th></tr></thead>
+          <tbody>
+            <tr><td>cicids2017</td><td>CICIDS 2017</td><td>CSV dir/file</td></tr>
+            <tr><td>nslkdd</td><td>NSL-KDD</td><td>.txt no header</td></tr>
+            <tr><td>unswnb15</td><td>UNSW-NB15</td><td>CSV dir/file</td></tr>
+            <tr><td>cicddos2019</td><td>CIC-DDoS 2019</td><td>CSV dir/file</td></tr>
+            <tr><td>kddcup99</td><td>KDD Cup 99</td><td>.gz/.csv/.txt</td></tr>
+            <tr><td>custom</td><td>Any CSV</td><td>auto label</td></tr>
+            <tr><td>auto</td><td>Auto-detect</td><td>any above</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="page" id="page-settings">
+  <div class="two-col">
+    <div class="card">
+      <div class="card-hdr"><span>🎚 Detection Thresholds</span></div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:1.25rem">
+        <div class="slider-group">
+          <label>Hybrid Threshold <strong id="hybLbl" style="color:var(--blue)">0.717</strong></label>
+          <input type="range" id="hybSlider" min="0.1" max="0.95" step="0.005" value="0.717"
+                 oninput="document.getElementById('hybLbl').textContent=parseFloat(this.value).toFixed(3)"/>
+          <div class="slider-hint"><span>More sensitive</span><span>Less sensitive</span></div>
+        </div>
+        <div class="slider-group">
+          <label>LSTM Threshold <strong id="lstmLbl" style="color:var(--blue)">1.165</strong></label>
+          <input type="range" id="lstmSlider" min="0.3" max="5.0" step="0.05" value="1.165"
+                 oninput="document.getElementById('lstmLbl').textContent=parseFloat(this.value).toFixed(2)"/>
+        </div>
+        <div class="slider-group">
+          <label>IF Weight <strong id="ifwLbl" style="color:var(--blue)">0.50</strong></label>
+          <input type="range" id="ifwSlider" min="0" max="1" step="0.05" value="0.50"
+                 oninput="document.getElementById('ifwLbl').textContent=parseFloat(this.value).toFixed(2)"/>
+        </div>
+        <button class="btn-primary" onclick="applyThresholds()">Apply Thresholds</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span>ℹ️ System Info</span></div>
+      <div style="padding:1rem">
+        <table class="data-tbl">
+          <tbody>
+            <tr><td>Mode</td><td id="infoMode">—</td></tr>
+            <tr><td>Detection</td><td>Hybrid IF + LSTM</td></tr>
+            <tr><td>IF Weight</td><td id="infoIfw">—</td></tr>
+            <tr><td>LSTM Weight</td><td id="infoLstmw">—</td></tr>
+            <tr><td>Threshold</td><td id="infoThresh">—</td></tr>
+            <tr><td>Features</td><td>17 network features</td></tr>
+            <tr><td>Attack Classes</td><td>7 classes</td></tr>
+            <tr><td>Database</td><td><span id="infoDB">—</span> <button class="hdr-btn" onclick="checkDB()" style="margin-left:.3rem">Check</button></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:1rem;display:flex;gap:.5rem">
+          <button class="btn-outline" onclick="toggleSound()">Toggle Sound</button>
+          <button class="btn-danger"  onclick="logout()">Sign Out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <!-- Floating AI Analysis Panel (accessible from any page) -->
+  <div id="aiPanel" style="display:none;position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);
+       width:min(700px,95vw);max-height:80vh;overflow-y:auto;z-index:500;
+       background:var(--card);border:1px solid var(--border);border-radius:12px;
+       box-shadow:0 8px 40px rgba(0,0,0,.8);">
+    <div class="card-hdr" style="position:sticky;top:0;background:var(--card)">
+      <span>🤖 AI Alert Analysis</span>
+      <button class="hdr-btn" onclick="closeAiPanel()">✕ Close</button>
+    </div>
+    <div id="aiContent" style="padding:1rem;font-size:.83rem"></div>
+  </div>
+</main>
+<div id="toasts"></div>
+<script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NIDS – Secure Login</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .login-wrap { width:100%; max-width:420px; padding:0 1rem; }
+    .login-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      box-shadow: 0 0 40px rgba(0,212,255,0.08);
+    }
+    .login-logo {
+      text-align:center; margin-bottom:2rem;
+    }
+    .login-logo .shield-icon {
+      font-size:3rem; filter: drop-shadow(0 0 12px #00d4ff);
+    }
+    .login-logo h1 { color:var(--accent-blue); font-size:1.4rem; margin-top:.5rem; letter-spacing:2px; }
+    .login-logo p  { color:var(--text-muted); font-size:.8rem; margin-top:.25rem; }
+    .form-group { margin-bottom:1.25rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-secondary); font-size:.85rem; letter-spacing:.5px; }
+    .form-group input {
+      width:100%; padding:.75rem 1rem;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius:6px; color:var(--text-primary);
+      font-size:.95rem; transition: border-color .2s, box-shadow .2s;
+      box-sizing:border-box;
+    }
+    .form-group input:focus {
+      outline:none; border-color:var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(0,212,255,.15);
+    }
+    .btn-login {
+      width:100%; padding:.85rem;
+      background: linear-gradient(135deg, #00d4ff, #0099cc);
+      border:none; border-radius:6px; color:#000;
+      font-weight:700; font-size:1rem; cursor:pointer;
+      letter-spacing:1px; transition: opacity .2s, transform .1s;
+    }
+    .btn-login:hover { opacity:.9; transform:translateY(-1px); }
+    .btn-login:active { transform:translateY(0); }
+    .error-msg {
+      background: rgba(255,68,68,.12); border:1px solid var(--danger);
+      color:var(--danger); padding:.6rem 1rem; border-radius:6px;
+      font-size:.85rem; margin-bottom:1rem; display:none;
+    }
+    .default-creds {
+      text-align:center; margin-top:1.5rem;
+      color:var(--text-muted); font-size:.78rem;
+    }
+    .default-creds span { color:var(--accent-blue); font-family:monospace; }
+    /* Animated background */
+    .bg-grid { position:fixed; inset:0; z-index:-1; overflow:hidden; }
+    .bg-grid::before {
+      content:''; position:absolute; inset:0;
+      background:
+        linear-gradient(rgba(0,212,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,.04) 1px, transparent 1px);
+      background-size:40px 40px;
+      animation: gridMove 20s linear infinite;
+    }
+    @keyframes gridMove { to { transform: translateY(40px); } }
+    .scan-line {
+      position:fixed; top:0; left:0; right:0; height:2px;
+      background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+      animation: scanDown 4s linear infinite; z-index:-1;
+    }
+    @keyframes scanDown { to { top:100vh; } }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="scan-line"></div>
+
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="shield-icon">🛡️</div>
+        <h1>NIDS PORTAL</h1>
+        <p>Network Intrusion Detection System</p>
+      </div>
+
+      <div class="error-msg" id="errorMsg">Invalid username or password.</div>
+
+      <div class="form-group">
+        <label>USERNAME</label>
+        <input type="text" id="username" placeholder="Enter username" autocomplete="username"/>
+      </div>
+      <div class="form-group">
+        <label>PASSWORD</label>
+        <input type="password" id="password" placeholder="Enter password" autocomplete="current-password"/>
+      </div>
+
+      <button class="btn-login" id="loginBtn" onclick="doLogin()">AUTHENTICATE</button>
+
+      <div class="default-creds">
+        Default credentials: <span>admin</span> / <span>nids@2024</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Allow Enter key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('loginBtn');
+      const err = document.getElementById('errorMsg');
+
+      if (!username || !password) {
+        err.textContent = 'Please enter both username and password.';
+        err.style.display = 'block'; return;
+      }
+
+      btn.textContent = 'AUTHENTICATING…'; btn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          btn.textContent = 'ACCESS GRANTED ✓';
+          setTimeout(() => window.location.href = '/', 500);
+        } else {
+          err.textContent = 'Invalid credentials. Access denied.';
+          err.style.display = 'block';
+          btn.textContent = 'AUTHENTICATE'; btn.disabled = false;
+        }
+      } catch (e) {
+        err.textContent = 'Server unreachable. Try again.';
+        err.style.display = 'block';
+        btn.textContent = 'AUTHENTICATE'; btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

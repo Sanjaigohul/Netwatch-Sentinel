@@ -1,0 +1,15 @@
+# Python virtual environments
+.venv/
+.venv*/
+
+# Environment files
+.env
+.env.example
+
+# Datasets
+nids_project/datasets/
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
