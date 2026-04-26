@@ -223,16 +223,6 @@ def _pipeline_worker():
             _alert_buffer.appendleft(alert)
             socketio.emit("new_alert", alert)
 
-            # Persist anomalies to DB
-            if result.final_result == -1 and _db_available:
-                try:
-                    _db.insert_alert({
-                        **alert,
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
-                    })
-                except Exception:
-                    pass
-
             # ── PPS update (every second) ─────────────────────────────────
             if time.time() - last_pps_update >= 1.0:
                 recent = [t for t in _pkt_rate_ts
@@ -256,6 +246,14 @@ def _pipeline_worker():
 
 def _persist_to_db(pkt, fvec, result):
     try:
+        def _is_anomaly_flag(val) -> bool:
+            if isinstance(val, str):
+                return val.strip().lower() in ("-1", "anomaly", "attack", "true", "yes")
+            try:
+                return int(val) == -1
+            except Exception:
+                return False
+
         pkt_row = {
             "timestamp":    datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
             "src_ip":       result.src_ip,
@@ -285,8 +283,25 @@ def _persist_to_db(pkt, fvec, result):
             "threat_level":         result.threat_level,
             "is_blacklisted":       int(result.is_blacklisted),
         })
+        if _is_anomaly_flag(result.final_result):
+            _db.insert_alert({
+                "timestamp":     pkt_row["timestamp"],
+                "src_ip":        result.src_ip,
+                "dst_ip":        result.dst_ip,
+                "attack_type":   result.attack_type,
+                "threat_level":  result.threat_level,
+                "anomaly_score": round(result.anomaly_score, 4),
+            })
+            _db.insert_anomaly_alert({
+                "timestamp":     pkt_row["timestamp"],
+                "src_ip":        result.src_ip,
+                "dst_ip":        result.dst_ip,
+                "attack_type":   result.attack_type,
+                "threat_level":  result.threat_level,
+                "anomaly_score": round(result.anomaly_score, 4),
+            })
     except Exception as exc:
-        logger.debug(f"DB persist error: {exc}")
+        logger.exception(f"DB persist error: {exc}")
 
 
 def _build_stats() -> dict:

@@ -151,8 +151,39 @@ def insert_alert(alert: dict) -> int:
             (%(timestamp)s, %(src_ip)s, %(dst_ip)s, %(attack_type)s,
              %(threat_level)s, %(anomaly_score)s)
     """
+    payload = {
+        "timestamp": alert.get("timestamp")
+        or datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+        "src_ip": alert.get("src_ip", ""),
+        "dst_ip": alert.get("dst_ip", ""),
+        "attack_type": alert.get("attack_type", "Unknown"),
+        "threat_level": alert.get("threat_level", "High"),
+        "anomaly_score": alert.get("anomaly_score", 0.0),
+    }
     with get_conn() as (conn, cur):
-        cur.execute(sql, alert)
+        cur.execute(sql, payload)
+        return cur.lastrowid
+
+
+def insert_anomaly_alert(alert: dict) -> int:
+    sql = """
+        INSERT INTO anomaly_alerts
+            (timestamp, src_ip, dst_ip, attack_type, threat_level, anomaly_score)
+        VALUES
+            (%(timestamp)s, %(src_ip)s, %(dst_ip)s, %(attack_type)s,
+             %(threat_level)s, %(anomaly_score)s)
+    """
+    payload = {
+        "timestamp": alert.get("timestamp")
+        or datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+        "src_ip": alert.get("src_ip", ""),
+        "dst_ip": alert.get("dst_ip", ""),
+        "attack_type": alert.get("attack_type", "Unknown"),
+        "threat_level": alert.get("threat_level", "High"),
+        "anomaly_score": alert.get("anomaly_score", 0.0),
+    }
+    with get_conn() as (conn, cur):
+        cur.execute(sql, payload)
         return cur.lastrowid
 
 
